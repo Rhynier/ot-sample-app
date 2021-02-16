@@ -9,6 +9,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 
 namespace PaymentService
@@ -27,39 +28,38 @@ namespace PaymentService
         {
             services.AddControllers();
 
-            services.AddOpenTelemetry((builder) =>
+            services.AddOpenTelemetryTracing((builder) =>
             {
                 builder.AddAspNetCoreInstrumentation();
 
                 switch (Program.SelectedExporter)
                 {
                     case Exporter.Console:
-                        builder.UseConsoleExporter(o =>
-                        {
-                            o.DisplayAsJson = true;
-                        });
+                        builder.AddConsoleExporter();
                         break;
                     case Exporter.Jaeger:
-                        builder.UseJaegerExporter(o =>
+                        builder.AddJaegerExporter(o =>
                         {
                             o.AgentHost = Program.JaegerHost;
-                            o.ServiceName = "payments";
                         });
                         break;
                     case Exporter.OTC:
-                        builder.UseOtlpExporter(o =>
+                        builder.AddOtlpExporter(o =>
                         {
-                            o.Endpoint = Program.OtcHost;
+                            o.Endpoint = new Uri(Program.OtcHost);
                         });
                         break;
                 }
 
-                builder.SetResource(new OpenTelemetry.Resources.Resource(new Dictionary<string, object>
-                {
-                    { "k8.cluster", "dev" },
-                    { "appdynamics.service", "Payments" },
-                    { "service.name", "payments" }
-                }));
+                builder.SetResourceBuilder(
+                    ResourceBuilder.CreateDefault()
+                        .AddService("payments")
+                        .AddAttributes(new Dictionary<string, object>
+                        {
+                            { "k8.cluster", "dev" },
+                            { "appdynamics.service", "Payments" },
+                            { "service.name", "payments" }
+                        }));
             });
         }
 
